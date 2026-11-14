@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<title>Playlist Player</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0d12;
+    --surface: #151922;
+    --surface-2: #1d2230;
+    --border: #262c3a;
+    --text: #e8eaf0;
+    --muted: #8b93a7;
+    --accent: #ff4d4d;
+    --accent-hover: #ff6b6b;
+    --error: #ff8080;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: radial-gradient(circle at 50% -10%, #1a2033 0%, var(--bg) 55%);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Tahoma, Arial, sans-serif;
+    padding: 32px 16px;
+  }
+  .container { width: 100%; max-width: 1280px; margin: 0 auto; }
+
+  h1 { font-size: 1.6rem; margin: 0 0 6px; }
+  .subtitle { color: var(--muted); margin: 0 0 24px; font-size: 0.95rem; }
+
+  /* ---------- Form ---------- */
+  .form { display: flex; gap: 10px; flex-wrap: wrap; }
+  .form input {
+    flex: 1 1 260px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 14px 16px;
+    border-radius: 12px;
+    font-size: 1rem;
+    outline: none;
+    direction: ltr;
+    text-align: left;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .form input::placeholder { color: var(--muted); }
+  .form input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(255, 77, 77, 0.2);
+  }
+  .form button {
+    background: var(--accent);
+    color: #fff;
+    border: 0;
+    padding: 14px 26px;
+    border-radius: 12px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+  }
+  .form button:hover { background: var(--accent-hover); }
+  .form button:active { transform: scale(0.97); }
+  .form button:disabled { opacity: 0.6; cursor: wait; }
+
+  .error { color: var(--error); min-height: 1.4em; margin: 10px 2px 0; font-size: 0.9rem; }
+
+  /* ---------- Layout: player + list ---------- */
+  /* In RTL the first child (player) sits on the right, the list on the left. */
+  .layout {
+    margin-top: 16px;
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    gap: 16px;
+    align-items: stretch;
+  }
+
+  .player-wrap {
+    position: relative;
+    aspect-ratio: 16 / 9;          /* this cell decides the row height */
+    background: #000;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+  }
+  .player-wrap iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+  .placeholder {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    text-align: center;
+    color: var(--muted);
+    padding: 20px;
+    line-height: 1.8;
+    background: var(--surface);
+  }
+  .placeholder span { font-size: 2.5rem; display: block; }
+
+  /* ---------- Playlist panel ---------- */
+  .list-panel {
+    position: relative;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+  }
+  .list-inner {                    /* absolute = list never makes the row taller than the player */
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .list-header { padding: 16px 18px; border-bottom: 1px solid var(--border); flex: none; }
+  .list-header h2 { margin: 0 0 4px; font-size: 1.1rem; line-height: 1.4; }
+  .list-header p { margin: 0; color: var(--muted); font-size: 0.85rem; }
+
+  .list-scroll { overflow-y: auto; flex: 1; padding: 6px; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+
+  .video-item {
+    all: unset;                    /* reset <button> styles */
+    box-sizing: border-box;
+    display: grid;
+    grid-template-columns: 24px 128px 1fr;
+    gap: 10px;
+    align-items: center;
+    width: 100%;
+    padding: 8px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .video-item:hover { background: var(--surface-2); }
+  .video-item:focus-visible { outline: 2px solid var(--accent); }
+  .video-item.active { background: #2a2030; box-shadow: inset -3px 0 0 var(--accent); }
+
+  .video-index { color: var(--muted); font-size: 0.8rem; text-align: center; }
+  .video-item.active .video-index { color: var(--accent); }
+
+  .thumb { position: relative; aspect-ratio: 16 / 9; border-radius: 8px; overflow: hidden; background: #000; }
+  .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .duration {
+    position: absolute;
+    bottom: 4px;
+    left: 4px;
+    background: rgba(0, 0, 0, 0.8);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    direction: ltr;
+  }
+
+  .video-title {
+    font-size: 0.88rem;
+    line-height: 1.45;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .video-channel { color: var(--muted); font-size: 0.78rem; margin-top: 3px; }
+
+  /* ---------- Mobile ---------- */
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+    .list-panel { height: 440px; }
+  }
+</style>
+</head>
+<body>
+  <main class="container">
+    <h1>▶ Playlist Player</h1>
+    <p class="subtitle">حط لينك الـ YouTube playlist واضغط Load</p>
+
+    <form class="form" id="form">
+      <input id="url" type="text" placeholder="https://www.youtube.com/playlist?list=PL..." autocomplete="off" spellcheck="false">
+      <button type="submit" id="submit">Load</button>
+    </form>
+    <p class="error" id="error" role="alert"></p>
+
+    <section class="layout">
+      <div class="player-wrap">
+        <div id="player"></div>
+        <div class="placeholder" id="placeholder">
+          <div><span>🎬</span>الـ playlist هتظهر هنا</div>
+        </div>
+      </div>
+
+      <aside class="list-panel">
+        <div class="list-inner">
+          <div class="list-header">
+            <h2 id="list-title">Playlist</h2>
+            <p id="list-meta">الفيديوهات هتظهر هنا بعد ما تعمل Load</p>
+          </div>
+          <div class="list-scroll" id="list"></div>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+<script>
+  // =====================================================
+  // 1) Config — حط الـ API key بتاعك هنا
+  // =====================================================
+  const API_KEY = "PAIzaSyBv_lIQfPUXUakPlgkdARnbP-4Cm6UEAwc";
+  const API_BASE = "https://www.googleapis.com/youtube/v3";
+
+  // =====================================================
+  // 2) State + DOM references
+  // =====================================================
+  let videos = [];          // [{ id, title, channel, thumb, duration }]
+  let currentIndex = -1;
+  let playlistMeta = { title: "", channel: "" };
+  let ytPlayer = null;      // YT.Player instance
+  let playerReady = null;   // Promise that resolves when the player is ready
+
+  const form = document.getElementById("form");
+  const input = document.getElementById("url");
+  const submitBtn = document.getElementById("submit");
+  const errorEl = document.getElementById("error");
+  const placeholder = document.getElementById("placeholder");
+  const listEl = document.getElementById("list");
+  const listTitle = document.getElementById("list-title");
+  const listMeta = document.getElementById("list-meta");
+
+  // =====================================================
+  // 3) Load the YouTube IFrame Player API
+  // =====================================================
+  const ytReady = new Promise((resolve) => {
+    window.onYouTubeIframeAPIReady = resolve; // YouTube calls this global function when ready
+    const script = document.createElement("script");
+    script.src = "https://www.youtube.com/iframe_api";
+    document.head.appendChild(script);
+  });
+
+  // =====================================================
+  // 4) Helpers
+  // =====================================================
+  function getPlaylistId(value) {
+    const text = value.trim();
+    if (!text) return null;
+    try {
+      const id = new URL(text).searchParams.get("list");
+      if (id) return id;
+    } catch (e) { /* not a URL, maybe a raw ID */ }
+    return /^[A-Za-z0-9_-]{10,}$/.test(text) ? text : null;
+  }
+
+  // "PT1H2M3S" -> "1:02:03"
+  function formatDuration(iso) {
+    const m = /PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/.exec(iso || "");
+    if (!m) return "";
+    const h = Number(m[1] || 0), min = Number(m[2] || 0), s = Number(m[3] || 0);
+    const ss = String(s).padStart(2, "0");
+    return h ? `${h}:${String(min).padStart(2, "0")}:${ss}` : `${min}:${ss}`;
+  }
+
+  // Create an element safely (textContent, never innerHTML -> no XSS)
+  function el(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+
+  async function api(endpoint, params) {
+    const url = new URL(`${API_BASE}/${endpoint}`);
+    Object.entries({ ...params, key: API_KEY }).forEach(([k, v]) => {
+      if (v !== undefined && v !== "") url.searchParams.set(k, v);
+    });
+    const res = await fetch(url);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error?.message || `Request failed (${res.status})`);
+    return data;
+  }
+
+  // =====================================================
+  // 5) Fetch the playlist data from YouTube Data API v3
+  // =====================================================
+  async function fetchPlaylist(playlistId) {
+    // a) playlist title + channel
+    const meta = await api("playlists", { part: "snippet", id: playlistId });
+    if (!meta.items?.length) throw new Error("الـ playlist مش موجودة أو Private.");
+    playlistMeta = {
+      title: meta.items[0].snippet.title,
+      channel: meta.items[0].snippet.channelTitle,
+    };
+
+    // b) all videos (50 per page, so we loop with nextPageToken)
+    const items = [];
+    let pageToken = "";
+    do {
+      const page = await api("playlistItems", {
+        part: "snippet,contentDetails",
+        playlistId,
+        maxResults: 50,
+        pageToken,
+      });
+      items.push(...page.items);
+      pageToken = page.nextPageToken || "";
+    } while (pageToken);
+
+    const list = items
+      .filter((i) => !["Private video", "Deleted video"].includes(i.snippet.title))
+      .map((i) => ({
+        id: i.contentDetails.videoId,
+        title: i.snippet.title,
+        channel: i.snippet.videoOwnerChannelTitle || playlistMeta.channel,
+        thumb: i.snippet.thumbnails?.medium?.url || i.snippet.thumbnails?.default?.url || "",
+        duration: "",
+      }));
+
+    // c) durations come from a different endpoint (videos), up to 50 IDs per call
+    for (let i = 0; i < list.length; i += 50) {
+      const chunk = list.slice(i, i + 50);
+      const data = await api("videos", { part: "contentDetails", id: chunk.map((v) => v.id).join(",") });
+      const map = new Map(data.items.map((v) => [v.id, v.contentDetails.duration]));
+      chunk.forEach((v) => (v.duration = formatDuration(map.get(v.id))));
+    }
+
+    return list;
+  }
+
+  // =====================================================
+  // 6) Render the list
+  // =====================================================
+  function renderList() {
+    listTitle.textContent = playlistMeta.title;
+    listTitle.dir = "auto";
+    listEl.replaceChildren();
+
+    videos.forEach((video, index) => {
+      const item = el("button", "video-item");
+      item.type = "button";
+      item.dataset.index = index;
+
+      const num = el("span", "video-index", String(index + 1));
+
+      const thumb = el("div", "thumb");
+      const img = document.createElement("img");
+      img.src = video.thumb;
+      img.alt = "";
+      img.loading = "lazy";
+      thumb.append(img, el("span", "duration", video.duration));
+
+      const info = el("div");
+      const title = el("div", "video-title", video.title);
+      title.dir = "auto";
+      info.append(title, el("div", "video-channel", video.channel));
+
+      item.append(num, thumb, info);
+      item.addEventListener("click", () => selectVideo(index, true));
+      listEl.appendChild(item);
+    });
+  }
+
+  function paintActive() {
+    listEl.querySelectorAll(".video-item").forEach((node) => {
+      const isActive = Number(node.dataset.index) === currentIndex;
+      node.classList.toggle("active", isActive);
+      if (isActive) node.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    });
+    listMeta.textContent = `${currentIndex + 1} من أصل ${videos.length} - ${playlistMeta.channel}`;
+  }
+
+  // =====================================================
+  // 7) Player control
+  // =====================================================
+  function createPlayer(videoId, autoplay) {
+    playerReady = new Promise((resolve) => {
+      ytPlayer = new YT.Player("player", {
+        videoId,
+        playerVars: { autoplay: autoplay ? 1 : 0, rel: 0, playsinline: 1 },
+        events: {
+          onReady: resolve,
+          onStateChange: (e) => {
+            // When a video ends, play the next one
+            if (e.data === YT.PlayerState.ENDED && currentIndex < videos.length - 1) {
+              selectVideo(currentIndex + 1, true);
+            }
+          },
+          onError: () => {
+            errorEl.textContent = "الفيديو ده مش بيسمح بالـ embed أو فيه مشكلة — جرب فيديو تاني.";
+          },
+        },
+      });
+    });
+  }
+
+  async function selectVideo(index, autoplay) {
+    currentIndex = index;
+    errorEl.textContent = "";
+    placeholder.hidden = true;
+    paintActive();
+
+    await ytReady;
+    const id = videos[index].id;
+
+    if (!ytPlayer) {
+      createPlayer(id, autoplay);
+    } else {
+      await playerReady;
+      autoplay ? ytPlayer.loadVideoById(id) : ytPlayer.cueVideoById(id);
+    }
+  }
+
+  // =====================================================
+  // 8) Form submit
+  // =====================================================
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    errorEl.textContent = "";
+
+    if (API_KEY === "PASTE_YOUR_API_KEY_HERE") {
+      errorEl.textContent = "لازم تحط الـ API key بتاعك في متغير API_KEY جوه الـ script.";
+      return;
+    }
+
+    const id = getPlaylistId(input.value);
+    if (!id) {
+      errorEl.textContent = "اللينك مش مظبوط — لازم يكون فيه list=... زي لينك الـ playlist.";
+      return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Loading...";
+    try {
+      videos = await fetchPlaylist(id);
+      if (!videos.length) throw new Error("مفيش فيديوهات متاحة في الـ playlist دي.");
+      renderList();
+      await selectVideo(0, false); // show the first video without autoplay
+    } catch (err) {
+      errorEl.textContent = "حصل error: " + err.message;
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Load";
+    }
+  });
+</script>
+</body>
+</html>
