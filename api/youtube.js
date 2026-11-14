@@ -1,7 +1,7 @@
 module.exports = async (req, res) => {
-  if (!process.env.YOUTUBE_API_KEY) {
+  if (!process.env.API_KEY) {
     return res.status(500).json({
-      error: { message: "YOUTUBE_API_KEY is not set on the server. Add it in Vercel and Redeploy." },
+      error: { message: "API_KEY is not set on the server. Add it in Vercel and Redeploy." },
     });
   }
   const { endpoint, ...params } = req.query;
@@ -14,7 +14,7 @@ module.exports = async (req, res) => {
 
   const url = new URL(`https://www.googleapis.com/youtube/v3/${endpoint}`);
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-  url.searchParams.set("key", process.env.YOUTUBE_API_KEY); // the key lives here only
+  url.searchParams.set("key", process.env.API_KEY); // the key lives here only
 
   const response = await fetch(url);
   const data = await response.json();
