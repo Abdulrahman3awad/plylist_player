@@ -397,7 +397,7 @@
   async function selectVideo(index, autoplay) {
     currentIndex = index;
     errorEl.textContent = "";
-    placeholder.hidden = true;
+    placeholder.style.display = "none";
     paintActive();
 
     await ytReady;
