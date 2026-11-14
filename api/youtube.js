@@ -1,4 +1,9 @@
 module.exports = async (req, res) => {
+  if (!process.env.YOUTUBE_API_KEY) {
+    return res.status(500).json({
+      error: { message: "YOUTUBE_API_KEY is not set on the server. Add it in Vercel and Redeploy." },
+    });
+  }
   const { endpoint, ...params } = req.query;
 
   // Only allow the 3 endpoints we actually use
